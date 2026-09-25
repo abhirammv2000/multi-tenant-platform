@@ -1,0 +1,107 @@
+# The platform's own reverse proxy, not a tenant resource, so it lives in its own
+# namespace with a ClusterRole broader than any single tenant's Phase 4 RBAC grant: it
+# needs to read Endpoints across every tenant-* namespace to route to any of them.
+# Apply once per cluster:
+#   kubectl create secret generic reverse-proxy-secret --namespace platform \
+#     --from-literal=cookie-secret=$(openssl rand -hex 32)
+#   kubectl apply -f k8s/bootstrap/reverse-proxy.yaml
+#   kubectl create configmap reverse-proxy-script --namespace platform \
+#     --from-file=sticky-proxy.js=k8s/proxy/sticky-proxy.js
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: reverse-proxy-sa
+  namespace: platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: reverse-proxy-endpoints-reader
+rules:
+  - apiGroups: [""]
+    resources: ["endpoints"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: reverse-proxy-endpoints-reader-binding
+subjects:
+  - kind: ServiceAccount
+    name: reverse-proxy-sa
+    namespace: platform
+roleRef:
+  kind: ClusterRole
+  name: reverse-proxy-endpoints-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reverse-proxy
+  namespace: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reverse-proxy
+  template:
+    metadata:
+      labels:
+        app: reverse-proxy
+    spec:
+      serviceAccountName: reverse-proxy-sa
+      containers:
+        - name: proxy
+          image: node:20-alpine
+          command: ["node", "/script/sticky-proxy.js"]
+          env:
+            - name: PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: reverse-proxy-secret
+                  key: cookie-secret
+          volumeMounts:
+            - name: script
+              mountPath: /script
+          ports:
+            - containerPort: 3000
+          securityContext:
+            runAsNonRoot: true
+            #node:20-alpine's default image user is root (unlike kpack-built app images,
+            #which always run as non-root per the CNB spec, so tenant app pods never
+            #needed this explicit UID). runAsNonRoot alone isn't enough for a root-default
+            #image; a CreateContainerConfigError ("will run as root") showed up without this.
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      volumes:
+        - name: script
+          configMap:
+            name: reverse-proxy-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reverse-proxy
+  namespace: platform
+spec:
+  selector:
+    app: reverse-proxy
+  ports:
+    - port: 3000
+      targetPort: 3000

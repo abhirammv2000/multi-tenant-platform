@@ -1,0 +1,64 @@
+# One-time, cluster-scoped kpack setup. Every tenant namespace's Image resources reference
+# this same ClusterBuilder (not the namespaced Builder kind) so it never needs to be copied
+# per tenant (ClusterBuilder is a valid Image.spec.builder.kind, see
+# pkg/apis/build/v1alpha2/image_validation.go in kpack).
+#
+# Apply once per cluster, after kpack itself is installed:
+#   kubectl create secret docker-registry platform-registry-credentials \
+#     --docker-server=<REGISTRY_SERVER> --docker-username=<REGISTRY_USERNAME> \
+#     --docker-password=<REGISTRY_PASSWORD> --namespace kpack
+#   kubectl apply -f k8s/bootstrap/kpack-platform-builder.yaml
+#
+# Node.js was chosen for this ClusterStore/ClusterBuilder over Java because it's what got
+# verified working end-to-end in Phase 0. Java's Paketo buildpack hit Gradle/JDK toolchain
+# version drift against the tutorial's pinned sample, see the root README's Phase 0 section.
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-builder-sa
+  namespace: kpack
+secrets:
+  - name: platform-registry-credentials
+imagePullSecrets:
+  - name: platform-registry-credentials
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterStore
+metadata:
+  name: platform-store
+spec:
+  sources:
+    - image: paketobuildpacks/nodejs
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterStack
+metadata:
+  name: platform-base
+spec:
+  id: "io.buildpacks.stacks.jammy"
+  buildImage:
+    image: "paketobuildpacks/build-jammy-base"
+  runImage:
+    image: "paketobuildpacks/run-jammy-base"
+---
+apiVersion: kpack.io/v1alpha2
+kind: ClusterBuilder
+metadata:
+  name: platform-builder
+spec:
+  serviceAccountRef:
+    name: platform-builder-sa
+    namespace: kpack
+  tag: PLACEHOLDER_REGISTRY:platform-builder # set to $IMAGE_REGISTRY:platform-builder before applying.
+  # colon (a tag), not slash: ECR doesn't auto-create a nested repository per path segment
+  # the way Docker Hub does (caught via a NAME_UNKNOWN push failure).
+  stack:
+    name: platform-base
+    kind: ClusterStack
+  store:
+    name: platform-store
+    kind: ClusterStore
+  order:
+    - group:
+        - id: paketo-buildpacks/nodejs
