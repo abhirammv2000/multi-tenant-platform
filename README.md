@@ -1,12 +1,7 @@
 # multi-tenant-platform
 
 A platform that lets tenants submit their own source code and have it built, deployed, and
-run in isolated Kubernetes pods. This matches the mechanisms described in Apple's "Software
-Engineer, Applied AI" JD: "a multi-tenant EKS platform that enables users to build, deploy,
-and run their own applications in Kubernetes pods, with integrated build pipelines,
-sidecars, and session-affinity reverse proxy," plus the preferred qualification calling out
-"container image builds, workload isolation, RBAC systems, and secure callback
-architectures."
+run in isolated Kubernetes pods.
 
 Each mechanism below was built and tested against a cluster, mostly local minikube, with
 temporary AWS EKS used for anything minikube on this dev machine couldn't validate. EKS
