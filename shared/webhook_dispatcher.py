@@ -1,7 +1,6 @@
-"""HMAC-signed webhook delivery, the "secure callback architecture" from the JD, same
-shape as GitHub's X-Hub-Signature-256 / Stripe's Stripe-Signature. Builds on
-self-healing-data-platform's webhook_dispatcher.py, which had delivery/retry/audit but no
-signature or replay protection.
+"""HMAC-signed webhook delivery, the same shape as GitHub's X-Hub-Signature-256 or
+Stripe's Stripe-Signature. Builds on self-healing-data-platform's webhook_dispatcher.py,
+which had delivery/retry/audit but no signature or replay protection.
 """
 import hmac
 import hashlib

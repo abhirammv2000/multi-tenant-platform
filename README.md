@@ -194,9 +194,9 @@ flowchart TB
     class NS,Image,Deploy,Pod,Kubeconfig tenant
 ```
 
-One mechanism per JD phrase, each independently demoable once built:
+One mechanism at a time, each independently demoable once built:
 
-| JD mechanism | Approach | Status |
+| Mechanism | Approach | Status |
 |---|---|---|
 | Container image builds | kpack (CNCF Cloud Native Buildpacks), in-cluster, no privileged pods, driven by the control plane's own `POST /builds` endpoint | Verified end-to-end (Phase 0 + Phase 2) |
 | Workload isolation | Namespace-per-tenant + default-deny `NetworkPolicy` + Pod Security Admission `restricted` + `ResourceQuota`/`LimitRange` | Verified end-to-end (Phase 0 + Phase 3), all applied at namespace-creation time, confirmed via `kubectl` and a pod admitted under `restricted` |
@@ -207,11 +207,10 @@ One mechanism per JD phrase, each independently demoable once built:
 
 ## Why this exists
 
-Built to close a gap found during a portfolio audit: no project anywhere builds/deploys
-arbitrary user-submitted code into isolated Kubernetes pods with RBAC and a
-session-affinity reverse proxy, every "multi-tenant" mention elsewhere was either an
-unbuilt roadmap item or unrelated infrastructure-service RBAC. This also maps directly to a
-core Responsibility in the target JD, not just a preferred qualification.
+No other project of mine builds and deploys arbitrary user-submitted code into isolated
+Kubernetes pods with real RBAC and a session-affinity reverse proxy, so this fills that gap
+with a small platform that does exactly that, each mechanism verified on a real cluster
+rather than just sketched out.
 
 ## Local development
 
