@@ -6,7 +6,10 @@ DeploymentStatus=Literal["pending", "deploying", "running", "failed", "stopped"]
 
 class DeploymentCreate(BaseModel):
     build_job_id: int
-    replica_count: int=Field(default=1, ge=1, le=10) #capped for a demo-scale project, a production platform would size this per tenant plan/quota
+    #8 is the most that fits the tenant ResourceQuota (4 CPU of limits / 500m per replica). More would create a
+    #Deployment whose last pods the quota rejects, so it would never finish rolling out.
+    #tests/test_isolation_manifests.py checks this number against the quota.
+    replica_count: int=Field(default=1, ge=1, le=8)
 
 class DeploymentResponse(BaseModel):
     id: int

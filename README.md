@@ -65,8 +65,9 @@ flowchart TB
 | Webhooks | Ran `scripts/webhook_test_receiver.py` as a separate process that recomputes the HMAC. A normal delivery was accepted. A tampered body and a request signed 400 seconds ago (window is 300) got 401. A fresh request was accepted again. |
 | Reverse proxy | Two tenants running at once, 5 requests each. Each stayed on its own pod (checked with a response header). A tenant with no deployment got 503. A forged cookie was ignored and replaced. |
 
-The unit tests (21) cover the control flow, with the Kubernetes calls mocked. They don't
-test Kubernetes or kpack, that part was checked by hand as above.
+The unit tests (39) cover the control flow and the objects this code asks Kubernetes to
+create, with the Kubernetes calls mocked. They don't test Kubernetes or kpack, that part was
+checked by hand as above.
 
 ## Build order
 
@@ -202,8 +203,24 @@ ADMIN_SECRET_KEY=$ADMIN_SECRET_KEY bash scripts/demo_end_to_end.sh
 venv\Scripts\python -m pytest
 ```
 
-21 tests. They cover tenant creation ordering, cross-tenant and not-yet-built deployment
+39 tests. They cover tenant creation ordering, cross-tenant and not-yet-built deployment
 rejection, the auth dependency, how the build pipeline handles Kubernetes errors, the
 Deployment and Service creation, the kubeconfig token logic, and webhook signing and
 delivery. The Kubernetes and kpack calls are mocked, so these test this repo's control
 flow and not Kubernetes or kpack themselves.
+
+`tests/test_isolation_manifests.py` records every object sent to a fake Kubernetes API and
+checks what the isolation depends on: the namespace is labelled to enforce the `restricted`
+Pod Security Standard, the quota and the default-deny NetworkPolicy say what they should (DNS
+only, nothing to `0.0.0.0/0`), the tenant Role is read-only on pods and logs, and the tenant
+pod passes every `restricted` rule. The compliance checker is itself tested against pods that
+break each rule. Writing them found two real gaps, both fixed:
+
+- Tenant pods had the ServiceAccount token mounted, so user code could talk to the Kubernetes
+  API as that account. They now set `automountServiceAccountToken: false`.
+- The API allowed 10 replicas, but the namespace quota (4 CPU of limits, 500m per replica)
+  only fits 8. Asking for 9 or 10 created a Deployment whose last pods the quota rejected, so
+  it never finished rolling out. The limit is 8 now, and a test fails if the quota and that
+  number drift apart.
+
+These check what the code asks for. That the cluster enforces it was checked by hand, above.
