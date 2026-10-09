@@ -216,11 +216,12 @@ only, nothing to `0.0.0.0/0`), the tenant Role is read-only on pods and logs, an
 pod passes every `restricted` rule. The compliance checker is itself tested against pods that
 break each rule. Writing them found two real gaps, both fixed:
 
-- Tenant pods had the ServiceAccount token mounted, so user code could talk to the Kubernetes
-  API as that account. They now set `automountServiceAccountToken: false`.
+- Tenant pods had the ServiceAccount token mounted, so user code could try the Kubernetes API
+  as that account. The account has no extra permissions, so this is defence in depth. They now
+  set `automountServiceAccountToken: false`.
 - The API allowed 10 replicas, but the namespace quota (4 CPU of limits, 500m per replica)
-  only fits 8. Asking for 9 or 10 created a Deployment whose last pods the quota rejected, so
-  it never finished rolling out. The limit is 8 now, and a test fails if the quota and that
-  number drift apart.
+  only fits 8. Kubernetes rejects pods that would exceed a quota, so replicas 9 and 10 could
+  not start. That is reasoned from how quotas work; I did not reproduce it on a cluster. The
+  limit is 8 now, and a test fails if the quota and that number drift apart.
 
 These check what the code asks for. That the cluster enforces it was checked by hand, above.
