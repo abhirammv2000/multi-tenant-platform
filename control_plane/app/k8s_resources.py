@@ -13,6 +13,16 @@ from shared.observability import get_logger
 
 log=get_logger(__name__)
 
+#What one tenant namespace may use in total, and what each tenant container asks for and is capped at.
+#Kept as constants so a test can check that the largest allowed replica count fits inside the quota.
+TENANT_QUOTA_HARD={
+    "requests.cpu": "2", "requests.memory": "4Gi",
+    "limits.cpu": "4", "limits.memory": "8Gi",
+    "pods": "20",
+}
+TENANT_CONTAINER_REQUESTS={"cpu": "100m", "memory": "128Mi"}
+TENANT_CONTAINER_LIMITS={"cpu": "500m", "memory": "512Mi"}
+
 REGISTRY_SECRET_NAME="tenant-registry-credentials"
 TENANT_SERVICE_ACCOUNT_NAME="tenant-build-sa"
 
@@ -66,11 +76,7 @@ def ensure_tenant_namespace(k8s_namespace: str):
     try:
         quota=k8s.V1ResourceQuota(
             metadata=k8s.V1ObjectMeta(name="tenant-quota", namespace=k8s_namespace),
-            spec=k8s.V1ResourceQuotaSpec(hard={
-                "requests.cpu": "2", "requests.memory": "4Gi",
-                "limits.cpu": "4", "limits.memory": "8Gi",
-                "pods": "20",
-            }),
+            spec=k8s.V1ResourceQuotaSpec(hard=dict(TENANT_QUOTA_HARD)),
         )
         core_v1.create_namespaced_resource_quota(namespace=k8s_namespace, body=quota)
         log.info("tenant_resource_quota_created", namespace=k8s_namespace)
@@ -236,7 +242,7 @@ def create_tenant_deployment(k8s_namespace: str, image: str, replica_count: int,
             seccomp_profile=k8s.V1SeccompProfile(type="RuntimeDefault"),
         ),
         resources=k8s.V1ResourceRequirements(
-            requests={"cpu": "100m", "memory": "128Mi"}, limits={"cpu": "500m", "memory": "512Mi"}
+            requests=dict(TENANT_CONTAINER_REQUESTS), limits=dict(TENANT_CONTAINER_LIMITS)
         ),
     )
     pod_spec=k8s.V1PodSpec(
@@ -246,6 +252,9 @@ def create_tenant_deployment(k8s_namespace: str, image: str, replica_count: int,
         #pushed it to. Without this, an ImagePullBackOff ("no basic auth credentials") hit
         #during Phase 3: the default ServiceAccount has no imagePullSecrets of its own.
         service_account_name=TENANT_SERVICE_ACCOUNT_NAME,
+        #The tenant's code does not call the Kubernetes API, and a token mounted into the pod would let it
+        #try. The kubelet pulls the image with imagePullSecrets, which does not need the token.
+        automount_service_account_token=False,
         security_context=k8s.V1PodSecurityContext(run_as_non_root=True, seccomp_profile=k8s.V1SeccompProfile(type="RuntimeDefault")),
     )
     deployment=k8s.V1Deployment(
