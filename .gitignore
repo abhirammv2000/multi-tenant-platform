@@ -6,3 +6,6 @@ venv/
 *.egg-info/
 .vscode/
 docker-compose.override.yml
+
+# Go build output
+/proxy/proxy

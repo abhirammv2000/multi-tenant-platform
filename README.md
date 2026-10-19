@@ -109,6 +109,40 @@ Code comments and test docstrings refer to these phases.
   `ebpf-bootstrap` init container needs `/sys/kernel/security`), which is why the
   NetworkPolicy check went to EKS.
 
+## The Go reverse proxy
+
+`proxy/` is a Go version of the reverse proxy. It routes the same way: `/t/<tenant id>/...`
+goes to one of that tenant's ready pods, and a signed cookie keeps a client on its pod. Cookies
+it issues are accepted by the Node proxy, and the other way round.
+
+What is different:
+
+- It keeps the ready pod addresses of every tenant in memory, kept current by a watch on
+  EndpointSlices. A request is a map lookup. The Node proxy asked the API server every time.
+- It checks the cookie signature in constant time.
+- `/readyz` fails until the first full list has loaded, so no traffic arrives before the proxy
+  knows where the pods are. `/healthz` answers straight away.
+- `/metrics` has Prometheus metrics: requests, duration, upstream errors, how each request got
+  its pod (sticky hit, new assignment, rejected cookie) and whether the cache has loaded. Only
+  tenants that have running pods become a label, so asking for `/t/<any number>/` cannot create
+  new series.
+- Logs are JSON, and it shuts down gracefully.
+
+The 19 Go tests use a fake Kubernetes client and Go's `httptest` package. They cover routing,
+cookie handling, the 404 and 503 cases, a pod that goes away, an unreachable pod and the metric
+labels.
+
+```bash
+cd proxy && go test ./...
+kubectl apply -k k8s/proxy/overlays/local   # minikube: run `minikube image load` for the image first
+```
+
+The pods need the `reverse-proxy-secret` (key `cookie-secret`) in the `platform` namespace, made
+the same way as in the Node steps under "Reverse proxy and webhook testing".
+
+`k8s/loadtest/` has a k6 job that runs inside the cluster. The manifests render with
+`kubectl kustomize`. I have not recorded a cluster run of the Go proxy, or load test results.
+
 ## Not done
 
 - The OpenTelemetry sidecar per tenant pod. Nothing is collecting the spans yet.
@@ -116,8 +150,10 @@ Code comments and test docstrings refer to these phases.
 - `scripts/demo_end_to_end.sh` scripts the whole two tenant flow, but I haven't run it start
   to finish on a fresh cluster. Everything in it was run by hand. Treat a first run as a
   test and read its PASS/FAIL lines.
-- The reverse proxy is the Node one in `k8s/proxy/`. It reads `Endpoints` and verifies
-  cookies with a plain string compare.
+- The reverse proxy that was checked on a cluster is the Node one in `k8s/proxy/`. It reads
+  `Endpoints` on every request and verifies cookies with a plain string compare. A Go
+  replacement is in `proxy/` (see above). It has unit tests, but I have not recorded a run of
+  it in a cluster.
 
 ## Local development
 

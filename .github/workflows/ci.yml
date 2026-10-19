@@ -23,3 +23,19 @@ jobs:
           API_KEY_SECRET: ci
           ADMIN_SECRET_KEY: ci
         run: python -m pytest -q
+
+  proxy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: proxy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: proxy/go.mod
+          cache-dependency-path: proxy/go.sum
+      - run: go vet ./...
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+      - run: go test -race ./...

@@ -1,0 +1,74 @@
+# Two dummy tenants for load and resilience tests. Each runs whoami (it prints the
+# pod that answered) as a Service called tenant-app in its own namespace, which is
+# where the proxy looks.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-901
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tenant-902
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-app
+  namespace: tenant-901
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: tenant-app}
+  template:
+    metadata:
+      labels: {app: tenant-app}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.10.3
+          args: ["--port=8080"]
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-app
+  namespace: tenant-901
+spec:
+  selector: {app: tenant-app}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-app
+  namespace: tenant-902
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: tenant-app}
+  template:
+    metadata:
+      labels: {app: tenant-app}
+    spec:
+      containers:
+        - name: whoami
+          image: traefik/whoami:v1.10.3
+          args: ["--port=8080"]
+          ports: [{containerPort: 8080}]
+          readinessProbe:
+            httpGet: {path: /health, port: 8080}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tenant-app
+  namespace: tenant-902
+spec:
+  selector: {app: tenant-app}
+  ports: [{port: 8080, targetPort: 8080}]
