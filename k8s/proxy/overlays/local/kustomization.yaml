@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+# The image is loaded straight into minikube (minikube image load), not pulled.
+images:
+  - name: multi-tenant-proxy
+    newTag: dev
+patches:
+  - target:
+      kind: Deployment
+      name: reverse-proxy
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Never
